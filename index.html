@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f7a5a">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<title>Absensi Pekerja</title>
+<!--
+PENGATURAN (data bersama antar HP):
+1. firebase.google.com > buat project > Build > Firestore Database > buat (test mode).
+2. Project settings > Your apps > Web (</>) > salin nilai firebaseConfig ke FIREBASE_CONFIG di bawah.
+3. Unggah file ini ke repo GitHub, lalu Settings > Pages > deploy dari branch main.
+Biarkan FIREBASE_CONFIG bernilai null untuk mode demo (data hanya tersimpan di perangkat ini).
+-->
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1a1d21;--mu:#6b7280;--bd:#e3e6ea;--ac:#1f7a5a;--ac2:#fff;--bad:#c0392b}
+@media(prefers-color-scheme:dark){:root{--bg:#14161a;--card:#1e2126;--tx:#eceef1;--mu:#9aa1ab;--bd:#2d3138;--ac:#3fb98b;--ac2:#08140f;--bad:#ff7b6b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:680px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+h1{font-size:22px;margin:8px 0 14px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+.mu{color:var(--mu);font-size:14px}
+button{font:inherit;border:0;border-radius:10px;padding:12px 16px;background:var(--ac);color:var(--ac2);font-weight:600;cursor:pointer}
+button.s{background:transparent;color:var(--tx);border:1px solid var(--bd);padding:8px 12px}
+button.x{padding:8px 10px;background:transparent;color:var(--bad);border:1px solid var(--bd)}
+button:disabled{opacity:.5}
+.big{width:100%;padding:18px;font-size:18px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:110px}
+input,select{font:inherit;width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
+label{display:block;font-size:13px;color:var(--mu);margin:8px 0 4px}
+.st{margin-top:10px;min-height:22px}.bad,.late{color:var(--bad)}.ok{color:var(--ac)}
+.sc{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 6px;text-align:center;border-bottom:1px solid var(--bd);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+.r{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
+.r input{flex:1}.r button{flex:none}
+hr{border:0;border-top:1px solid var(--bd);margin:14px 0}
+#mapw{position:relative;margin-top:10px}#map{height:320px;border-radius:12px;border:1px solid var(--bd);z-index:0}#cp{position:absolute;left:50%;top:50%;font-size:34px;line-height:1;transform:translate(-50%,-100%);pointer-events:none;z-index:2}
+.pin{font-size:28px;line-height:30px;background:none;border:0}
+a{color:var(--ac)}
+@media print{header,#demo,.tabs,.card:not(#rep){display:none!important}#rep .noprint,#rep button,#rep select,#rep input{display:none}}
+#qr{background:#fff;padding:10px;border-radius:12px;display:inline-block;line-height:0}
+#qr svg{width:220px;height:220px}
+.row.nw{flex-wrap:nowrap}.row.nw>*{flex:none;min-width:0}
+[hidden]{display:none!important}
+.tabs{display:none;gap:6px;overflow-x:auto;margin:0 0 14px;padding-bottom:4px}body.a .tabs{display:flex}
+.tabs button{flex:none;background:transparent;color:var(--tx);border:1px solid var(--bd);padding:9px 14px;white-space:nowrap}
+.tabs button.on{background:var(--ac);color:var(--ac2);border-color:var(--ac)}
+.chips{display:flex;gap:8px;margin:12px 0}.chip{flex:1;min-width:0;border:1px solid var(--bd);border-radius:10px;padding:8px 4px;text-align:center;font-size:12px;color:var(--mu)}.chip b{display:block;font-size:22px;color:var(--tx)}
+.chip.l b,.chip.a b{color:var(--bad)}.chip.p b{color:var(--ac)}
+.r small{display:block;color:var(--mu);font-size:13px}
+.sm{padding:4px 8px!important;font-size:13px;margin-top:4px}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Absensi Pekerja</h1><button class="s" id="login">Login Owner</button></header>
+<div id="demo" class="card mu" hidden>Mode demo: data hanya tersimpan di perangkat ini. Tambahkan konfigurasi Firebase di dalam file agar data dapat dibagikan antar HP.</div>
+<nav class="tabs" id="tabs"><button data-tab="in">Check-in</button><button data-tab="att">Kehadiran</button><button data-tab="rep">Bulanan</button><button data-tab="wk">Pekerja</button><button data-tab="loc">Lokasi</button><button data-tab="more">Lainnya</button></nav>
+
+<div class="card" data-t="in">
+  <h2>Check-in saya</h2>
+  <label style="margin-top:0">Siapa Anda?</label><select id="who"></select>
+  <div class="mu" id="site" style="margin-top:10px"></div>
+  <div id="today" style="margin:10px 0"></div>
+  <div id="lrw" hidden style="margin:10px 0"><label>Anda check-in terlambat. Alasan (opsional):</label><div class="row nw"><input id="lrs" placeholder="mis. motor mogok" style="flex:1"><button class="s" id="lrb">Simpan</button></div><div class="st" id="lrst"></div></div>
+  <div class="row"><button class="big" id="pin">✅ Check-in</button><button class="big" id="pout">🏁 Check-out</button></div>
+  <div class="st" id="st"></div>
+</div>
+
+<div class="card" data-t="att">
+  <h2>Pemantauan kehadiran</h2>
+  <div class="row nw"><button class="s" id="dprev">‹</button><input id="atd" type="date" style="flex:1"><button class="s" id="dnext">›</button><button class="s" id="dtoday">Hari ini</button></div>
+  <div class="chips" id="chips"></div>
+  <div id="alist"></div>
+</div>
+<div class="card" data-t="att"><h2>7 hari terakhir</h2><div class="sc" id="tbl"></div><p class="mu">Merah = terlambat.</p></div>
+<div class="card" data-t="att"><h2>Izin &amp; alasan terlambat</h2>
+  <div class="row"><select id="lvw"></select><input id="lvd" type="date"></div>
+  <div class="row" style="margin-top:8px"><select id="lvt"><option value="sick">Sakit</option><option value="other">Izin lain</option><option value="late">Alasan terlambat</option></select><input id="lvn" placeholder="Alasan (opsional)"></div>
+  <div class="row" style="margin-top:12px"><button id="lvb">Simpan catatan</button></div><div class="st" id="lvs"></div></div>
+
+<div class="card" data-t="wk"><h2 id="wh">Pekerja</h2><div id="wk"></div>
+  <div class="row" style="margin-top:12px"><input id="wnm" placeholder="Nama pekerja baru"><button id="wadd" style="flex:none">Tambah</button></div><div class="st" id="wst"></div><div id="old"></div></div>
+
+<div class="card" data-t="loc"><h2>Lokasi kerja</h2><div id="sites"></div><hr>
+  <h2 id="lh">Tambah lokasi</h2>
+  <div class="row"><button class="s" id="gps">📍 Ke posisi GPS saya</button><button class="s" id="mapt">🛰️ Tampilan satelit</button></div>
+  <div class="row" style="margin-top:8px"><input id="q" placeholder="Cari alamat atau tempat"><button class="s" id="qb" style="flex:none">Cari</button></div>
+  <div id="mapw"><div id="map"></div><div id="cp">📍</div></div>
+  <div class="mu" style="margin-top:6px">Geser peta hingga pin 📍 tepat di lokasi (atau ketuk peta), lalu simpan. <a id="gm" href="#" target="_blank" rel="noopener">Buka di Google Maps</a></div>
+  <label>Nama lokasi</label><input id="nm" placeholder="mis. Lokasi utama">
+  <div class="row"><div><label>Lintang (latitude)</label><input id="lat" inputmode="decimal"></div><div><label>Bujur (longitude)</label><input id="lng" inputmode="decimal"></div><div><label>Radius (m)</label><input id="rad" inputmode="numeric" value="100"></div></div>
+  <div class="row" style="margin-top:12px"><button id="add">Tambah lokasi</button><button class="s" id="cx" hidden>Batal</button></div><div class="st" id="sst"></div></div>
+
+<div class="card" id="rep" data-t="rep"><h2>Kehadiran bulanan</h2>
+  <div class="row noprint"><input id="mo" type="month"><select id="wwk"><option value="5">Hari kerja: Sen–Jum</option><option value="6">Hari kerja: Sen–Sab</option><option value="7">Hari kerja: setiap hari</option></select><button class="s" id="prt">🖨️ Cetak / PDF</button></div>
+  <div class="mu" id="mmeta" style="margin-top:8px"></div>
+  <div class="sc" id="mtbl" style="margin-top:10px"></div><div id="mnotes"></div></div>
+
+<div class="card" data-t="more"><h2>Kode QR untuk pekerja</h2><div id="qr"></div><div class="mu" id="qrl" style="word-break:break-all;margin-top:8px"></div></div>
+<div class="card" data-t="more"><h2>Aturan terlambat</h2><label>Terlambat jika check-in setelah</label><input id="lt" type="time" value="09:00" style="max-width:160px"><div class="st" id="lst"></div></div>
+<div class="card" data-t="more"><h2>Ekspor / Impor</h2>
+  <div class="mu">Ekspor menyimpan salinan data Anda di perangkat ini. Impor memuat file cadangan ke dalam aplikasi.</div>
+  <div class="row" style="margin-top:12px"><button class="s" id="exc">📊 Ekspor Excel (CSV)</button><button class="s" id="exj">💾 Ekspor cadangan (JSON)</button></div>
+  <div class="row" style="margin-top:8px"><button class="s" id="imb">📥 Impor cadangan (JSON)</button></div>
+  <input id="imf" type="file" accept=".json,application/json" hidden>
+  <div class="st" id="exst"></div></div>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB_RyveAgP-VNPqMejqhOAbwxT9NZel_L0",
+  authDomain: "absensi-cenderawasih-3.firebaseapp.com",
+  projectId: "absensi-cenderawasih-3",
+  storageBucket: "absensi-cenderawasih-3.firebasestorage.app",
+  messagingSenderId: "857719343353",
+  appId: "1:857719343353:web:09ec127ec608f97f023a28"
+};
+(function(){
+var $=function(s){return document.querySelector(s)},A,demo=false;
+var cfg={sites:[],lateAfter:'09:00',workers:[],pin:''},recs={},sel='',busy=false,isAdmin=false,sig=null,lt=false,map,mk,ring,sat=false,tiles={},tab='in',vd='',editI=-1;
+try{sel=localStorage.getItem('wid')||'';isAdmin=sessionStorage.getItem('adm')==='1';if(isAdmin)tab=sessionStorage.getItem('tab')||'att'}catch(e){}
+if(FIREBASE_CONFIG&&window.firebase){
+  firebase.initializeApp(FIREBASE_CONFIG);var f=firebase.firestore();
+  A={cfg:function(cb){f.doc('config/main').onSnapshot(function(s){cb(s.exists?s.data():null)})},
+     recs:function(cb){f.collection('attendance').onSnapshot(function(q){cb(q.docs.map(function(d){return d.data()}))})},
+     setCfg:function(o){return f.doc('config/main').set(o)},
+     setRec:function(id,o){return f.doc('attendance/'+id).set(o,{merge:true})},
+     delRec:function(id){return f.doc('attendance/'+id).delete()}};
+}else{
+  demo=true;var cb={},L=function(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}};
+  A={cfg:function(c){cb.c=c;c(L('cfg'))},recs:function(c){cb.r=c;c(Object.values(L('recs')||{}))},
+     setCfg:function(o){localStorage.setItem('cfg',JSON.stringify(o));cb.c(o);return Promise.resolve()},
+     setRec:function(id,o){var r=L('recs')||{};r[id]=Object.assign({},r[id],o);localStorage.setItem('recs',JSON.stringify(r));cb.r(Object.values(r));return Promise.resolve()},
+     delRec:function(id){var r=L('recs')||{};delete r[id];localStorage.setItem('recs',JSON.stringify(r));cb.r(Object.values(r));return Promise.resolve()}};
+  $('#demo').hidden=false;
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function ds(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function hm(t){return new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+function isLate(t){var d=new Date(t),p=cfg.lateAfter.split(':');return d.getHours()*60+d.getMinutes()>(+p[0])*60+(+p[1])}
+function hav(a,b,c,d){var R=6371000,r=Math.PI/180,x=(c-a)*r,y=(d-b)*r,h=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)*Math.sin(y/2);return 2*R*Math.asin(Math.sqrt(h))}
+function pos(){return new Promise(function(a,b){if(!navigator.geolocation)return b({message:'GPS tidak didukung di perangkat ini.'});navigator.geolocation.getCurrentPosition(a,b,{enableHighAccuracy:true,timeout:20000,maximumAge:0})})}
+function st(id,t,c){var e=$(id);e.textContent=t;e.className='st '+(c||'')}
+function gerr(e){return e&&e.code===1?'Izin lokasi ditolak. Mohon izinkan akses lokasi lalu coba lagi.':(e&&e.message)||'Tidak dapat mengambil posisi GPS Anda.'}
+function sha(s){if(!window.crypto||!crypto.subtle)return Promise.resolve('p:'+s);return crypto.subtle.digest('SHA-256',new TextEncoder().encode('att:'+s)).then(function(b){return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')})}
+function save(id,ok){return A.setCfg(cfg).then(function(){if(id)st(id,ok,'ok')}).catch(function(e){st(id||'#st','Gagal menyimpan: '+(e.message||e),'bad')})}
+function nameOf(id){var w=cfg.workers.filter(function(x){return x.id===id})[0];return w?w.name:((cfg.gone||{})[id]||'(dihapus)')}
+function isWork(k){var g=new Date(k+'T00:00:00').getDay(),n=+cfg.week||5;return n===7||(g>=1&&g<=(n===6?6:5))}
+function renderAtt(){
+  var td=ds(new Date());if(!vd||vd>td)vd=td;
+  if(document.activeElement!==$('#atd'))$('#atd').value=vd;
+  var isT=vd===td,work=isWork(vd),ids=cfg.workers.map(function(w){return w.id});
+  Object.keys(recs).forEach(function(k){if(ids.indexOf(k)<0&&(cfg.hid||[]).indexOf(k)<0&&recs[k][vd]&&(recs[k][vd].in||recs[k][vd].leave))ids.push(k)});
+  var P=0,Lt=0,Ab=0,Lv=0,h='';
+  ids.forEach(function(id){var r=(recs[id]||{})[vd]||{},b,dt='',nb='';
+    if(r.in){P++;var l=isLate(r.in);if(l)Lt++;b='<span class="'+(l?'late':'ok')+'"><b>'+(l?'Terlambat':'Hadir')+'</b></span>';
+      dt='Masuk '+hm(r.in)+(r.out?' · Pulang '+hm(r.out)+' · '+((r.out-r.in)/3600000).toFixed(1)+' jam':(isT?' · masih bekerja':' · tidak check-out'))+(r.site?' · '+esc(r.site):'')+(r.dist!=null?' · '+r.dist+' m dari lokasi':'')+(l&&r.lnote?'<br>Alasan: '+esc(r.lnote):'')}
+    else if(r.leave){Lv++;b='<span class="mu"><b>'+(r.leave==='sick'?'Sakit':'Izin')+'</b></span>';dt=r.note?esc(r.note):'';nb='<br><button class="x sm" data-d="'+esc(id+'|'+vd)+'">Hapus catatan</button>'}
+    else if(!work){b='<span class="mu">Libur</span>'}
+    else{Ab++;b=isT?'<span class="mu">Belum masuk</span>':'<span class="late"><b>Alpa</b></span>'}
+    h+='<div class="r"><span><b>'+esc(nameOf(id))+'</b>'+(dt?'<small>'+dt+'</small>':'')+'</span><span style="text-align:right">'+b+nb+'</span></div>'});
+  $('#chips').innerHTML='<div class="chip p"><b>'+P+'</b>Hadir</div><div class="chip l"><b>'+Lt+'</b>Terlambat</div><div class="chip a"><b>'+Ab+'</b>'+(isT?'Belum masuk':'Alpa')+'</div><div class="chip"><b>'+Lv+'</b>Izin</div>';
+  $('#alist').innerHTML=ids.length?h:'<div class="mu">Belum ada pekerja. Tambahkan di tab Pekerja.</div>';
+}
+function cell(r){return r&&r.in?'<span class="'+(isLate(r.in)?'late':'')+'">✓ '+hm(r.in)+'</span>':r&&r.leave?'<span class="mu">'+(r.leave==='sick'?'Sakit':'Izin')+'</span>':'–'}
+
+function render(){
+  if(!isAdmin)tab='in';
+  document.body.className=isAdmin?'a':'';$('#login').textContent=isAdmin?'Keluar':'Login Owner';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-t]'),function(e){e.hidden=e.dataset.t!==tab});
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'),function(e){e.classList.toggle('on',e.dataset.tab===tab)});
+  var s2=cfg.workers.map(function(w){return w.id+w.name}).join('|');
+  if(s2!==sig){sig=s2;var wo=cfg.workers.map(function(w){return'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>'}).join('');$('#who').innerHTML='<option value="">Pilih nama Anda…</option>'+wo;$('#lvw').innerHTML='<option value="">Pekerja…</option>'+wo}
+  if(!cfg.workers.some(function(w){return w.id===sel}))sel='';
+  $('#who').value=sel;
+  $('#site').textContent=(cfg.sites.length?'Lokasi yang diizinkan: '+cfg.sites.map(function(s){return s.name+' ('+s.radius+' m)'}).join(', '):'Belum ada lokasi kerja.')+(cfg.workers.length?'':' Belum ada nama pekerja.');
+  var d=sel?((recs[sel]||{})[ds(new Date())]||{}):{},t=$('#today'),ok=!busy&&cfg.sites.length&&sel;
+  if(!sel)t.textContent='Pilih nama Anda di atas.';
+  else if(d.out)t.textContent='✅ Masuk '+hm(d.in)+(isLate(d.in)?' (terlambat)':'')+' · pulang '+hm(d.out)+' · bekerja '+((d.out-d.in)/3600000).toFixed(1)+' jam';
+  else if(d.in)t.textContent='✅ Check-in pukul '+hm(d.in)+(isLate(d.in)?' (terlambat)':'')+'. Ketuk Check-out setelah selesai bekerja.';
+  else t.textContent='Belum check-in hari ini.';
+  var showL=!!(d.in&&isLate(d.in));$('#lrw').hidden=!showL;if(showL&&document.activeElement!==$('#lrs'))$('#lrs').value=d.lnote||'';
+  $('#pin').disabled=!ok||!!d.in;$('#pout').disabled=!ok||!d.in||!!d.out;
+  if(!isAdmin)return;if(tab==='loc')initMap();
+  if(document.activeElement!==$('#lt'))$('#lt').value=cfg.lateAfter;if(document.activeElement!==$('#wwk'))$('#wwk').value=cfg.week||'5';
+  if(!lt){lt=true;var u=location.origin+location.pathname;$('#qrl').textContent=u;
+    try{var q=qrcode(0,'M');q.addData(u);q.make();$('#qr').innerHTML=q.createSvgTag(6,0)}catch(e){$('#qr').textContent='QR gagal dimuat. Bagikan tautannya saja.'}}
+  $('#sites').innerHTML=cfg.sites.length?cfg.sites.map(function(s,i){return'<div class="r"><span><b>'+esc(s.name)+'</b>'+(i===editI?' <span class="ok">(sedang diubah)</span>':'')+'<br><span class="mu">'+(+s.lat).toFixed(5)+', '+(+s.lng).toFixed(5)+' · '+s.radius+' m</span></span><span class="row nw" style="flex:none;gap:6px"><button class="s" data-e="'+i+'">Ubah</button><button class="x" data-rm="'+i+'">Hapus</button></span></div>'}).join(''):'<div class="mu">Belum ada lokasi.</div>';
+  var ae=document.activeElement;if(!(ae&&ae.tagName==='INPUT'&&$('#wk').contains(ae)))$('#wk').innerHTML=cfg.workers.length?cfg.workers.map(function(w){return'<div class="r"><input data-n="'+esc(w.id)+'" value="'+esc(w.name)+'"><button class="s" data-s="'+esc(w.id)+'">Simpan</button><button class="x" data-r="'+esc(w.id)+'">Hapus</button></div>'}).join(''):'<div class="mu">Belum ada pekerja.</div>';
+  $('#wh').textContent='Pekerja ('+cfg.workers.length+')';
+  var og=Object.keys(recs).filter(function(k){return!cfg.workers.some(function(w){return w.id===k})&&(cfg.hid||[]).indexOf(k)<0});
+  $('#old').innerHTML=og.length?'<hr><h2>Pekerja yang dihapus (catatan lama)</h2>'+og.map(function(id){return'<div class="r"><span><b>'+esc(nameOf(id))+'</b><br><span class="mu">'+Object.keys(recs[id]).length+' catatan</span></span><button class="x" data-o="'+esc(id)+'">Hapus catatan</button></div>'}).join(''):'';
+  renderAtt();
+  var ids=cfg.workers.map(function(w){return w.id});Object.keys(recs).forEach(function(k){if(ids.indexOf(k)<0&&(cfg.hid||[]).indexOf(k)<0)ids.push(k)});
+  var days=[];for(var i=0;i<7;i++){var x=new Date();x.setDate(x.getDate()-i);days.push(ds(x))}
+  var h='<table><tr><th>Pekerja</th>'+days.map(function(k){return'<th>'+k.slice(5)+'</th>'}).join('')+'</tr>';
+  ids.forEach(function(id){h+='<tr><td>'+esc(nameOf(id))+'</td>'+days.map(function(k){return'<td>'+cell((recs[id]||{})[k])+'</td>'}).join('')+'</tr>'});
+  $('#tbl').innerHTML=ids.length?h+'</table>':'<span class="mu">Belum ada pekerja.</span>';
+  var mo=$('#mo').value||ds(new Date()).slice(0,7),y=+mo.slice(0,4),mm=+mo.slice(5,7)-1,td=ds(new Date()),wd=[],DW=['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+  for(var dd=new Date(y,mm,1);dd.getMonth()===mm;dd.setDate(dd.getDate()+1)){var k0=ds(dd);if(isWork(k0)&&k0<=td)wd.push(k0)}
+  $('#mmeta').textContent='Hari kerja yang dihitung sejauh ini: '+wd.length+'. Terlambat = check-in setelah '+cfg.lateAfter+'. Alpa = hari kerja tanpa check-in dan tanpa catatan izin.';
+  var m='<table><tr><th>Pekerja</th><th>Hari hadir</th><th>Tepat waktu</th><th>Terlambat</th><th>Alpa</th><th>Sakit</th><th>Izin lain</th><th>Jam</th></tr>',det='',rows=0;
+  ids.forEach(function(id){
+    var R=recs[id]||{},p=0,l=0,ab=0,sk=0,ot=0,ms=0,ev=[],cur=cfg.workers.some(function(w){return w.id===id}),
+        has=Object.keys(R).some(function(k){return k.slice(0,7)===mo&&(R[k].in||R[k].leave)});
+    if(!has&&!cur)return;
+    Object.keys(R).forEach(function(k){if(k.slice(0,7)!==mo)return;var r=R[k];
+      if(r.in){p++;if(r.out)ms+=r.out-r.in;if(isLate(r.in)){l++;ev.push({k:k,t:'late',x:'Terlambat · masuk '+hm(r.in),n:r.lnote})}}
+      else if(r.leave){if(r.leave==='sick')sk++;else ot++;ev.push({k:k,t:'leave',x:r.leave==='sick'?'Sakit':'Izin lain',n:r.note,del:1})}});
+    if(cur)wd.forEach(function(k){var r=R[k];if(!(r&&(r.in||r.leave))){ab++;ev.push({k:k,t:'abs',x:'Alpa'})}});
+    rows++;m+='<tr><td>'+esc(nameOf(id))+'</td><td>'+p+'</td><td>'+(p-l)+'</td><td class="'+(l?'late':'')+'">'+l+'</td><td class="'+(ab?'late':'')+'">'+ab+'</td><td>'+sk+'</td><td>'+ot+'</td><td>'+(ms/3600000).toFixed(1)+'</td></tr>';
+    ev.sort(function(a,b){return a.k<b.k?-1:1});
+    if(ev.length)det+='<h2 style="margin:16px 0 4px">'+esc(nameOf(id))+'</h2>'+ev.map(function(e){
+      return'<div class="r"><span><b>'+e.k.slice(8)+' '+DW[new Date(e.k+'T00:00:00').getDay()]+'</b> · <span class="'+(e.t==='leave'?'':'late')+'">'+e.x+'</span>'+(e.t==='abs'?'':'<br><span class="mu">'+(e.n?esc(e.n):'Tidak ada alasan')+'</span>')+'</span>'+(e.del?'<button class="x noprint" data-d="'+esc(id+'|'+e.k)+'">Hapus</button>':'')+'</div>'}).join('')});
+  $('#mtbl').innerHTML=rows?m+'</table>':'<span class="mu">Belum ada pekerja.</span>';
+  $('#mnotes').innerHTML=rows?(det?'<h2 style="margin-top:18px">Rincian terlambat, alpa &amp; izin</h2>'+det:'<div class="mu" style="margin-top:12px">Tidak ada data terlambat, alpa, atau izin bulan ini.</div>'):'';
+}
+
+async function punch(kind){
+  var k=ds(new Date()),cur=(recs[sel]||{})[k]||{};
+  if(!cfg.sites.length||!sel)return;busy=true;render();st('#st','Mengambil posisi GPS Anda…');
+  try{
+    var c=(await pos()).coords,best=null;
+    cfg.sites.forEach(function(s){var d=hav(c.latitude,c.longitude,s.lat,s.lng);if(!best||d<best.d)best={s:s,d:d}});
+    if(best.d>best.s.radius){st('#st','Terlalu jauh: Anda berjarak '+Math.round(best.d)+' m dari '+best.s.name+' (terdekat). Mendekatlah dalam radius '+best.s.radius+' m.','bad');return}
+    var o={wid:sel,date:k};
+    if(kind==='in'){if(cur.in)return;o.in=Date.now();o.dist=Math.round(best.d);o.site=best.s.name}
+    else{if(!cur.in||cur.out)return;o.out=Date.now()}
+    await A.setRec(sel+'_'+k,o);st('#st',(kind==='in'?'Check-in di ':'Check-out di ')+best.s.name+'.','ok');
+  }catch(e){st('#st',e&&e.code&&typeof e.code==='number'&&e.code<4?gerr(e):'Kesalahan: '+(e.message||e),'bad')}
+  finally{busy=false;render()}
+}
+
+A.cfg(function(d){d=d||{};cfg={sites:d.sites||[],lateAfter:d.lateAfter||'09:00',workers:d.workers||[],pin:d.pin||'',week:d.week||'5',gone:d.gone||{},hid:d.hid||[]};render()});
+A.recs(function(a){recs={};a.forEach(function(d){recs[d.wid]=recs[d.wid]||{};recs[d.wid][d.date]=d});render()});
+$('#mo').value=ds(new Date()).slice(0,7);$('#mo').onchange=render;
+$('#who').onchange=function(){sel=this.value;try{localStorage.setItem('wid',sel)}catch(e){}render()};
+$('#pin').onclick=function(){punch('in')};$('#pout').onclick=function(){punch('out')};
+$('#login').onclick=async function(){
+  if(isAdmin){isAdmin=false;tab='in';try{sessionStorage.removeItem('adm')}catch(e){}return render()}
+  var p=prompt(cfg.pin?'PIN Owner:':'Buat PIN owner (untuk login):');if(!p)return;
+  var h=await sha(p);
+  if(!cfg.pin){cfg.pin=h;await save()}else if(h!==cfg.pin){alert('PIN salah');return}
+  isAdmin=true;tab='att';try{sessionStorage.setItem('adm','1');sessionStorage.setItem('tab',tab)}catch(e){}render();
+};
+function setPin(lat,lng){
+  $('#lat').value=lat.toFixed(6);$('#lng').value=lng.toFixed(6);$('#gm').href='https://www.google.com/maps?q='+lat+','+lng;
+  if(ring)ring.setLatLng([lat,lng]);
+}
+function fromCenter(){if(!map)return;var c=map.getCenter();setPin(c.lat,c.lng)}
+function goTo(lat,lng,z){if(!map)return setPin(lat,lng);map.setView([lat,lng],z||map.getZoom());fromCenter()}
+function initMap(){
+  if(map||!window.L)return;
+  var c=cfg.sites[0];map=L.map('map').setView(c?[c.lat,c.lng]:[0,0],c?16:2);
+  tiles.s=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  tiles.t=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'});
+  var errs=0;tiles.s.on('tileerror',function(){if(++errs===4&&!sat){map.removeLayer(tiles.s);tiles.s=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}).addTo(map)}});
+  ring=L.circle(map.getCenter(),{radius:+$('#rad').value||100,weight:2,interactive:false}).addTo(map);
+  map.on('move',fromCenter);
+  map.on('click',function(e){map.panTo(e.latlng)});
+  if(c)fromCenter();
+  setTimeout(function(){map.invalidateSize();if(c)fromCenter()},150);
+}
+$('#gps').onclick=async function(){st('#sst','Mengambil posisi GPS…');
+  try{var p=await pos();goTo(p.coords.latitude,p.coords.longitude,18);st('#sst','Peta dipindah ke posisi GPS Anda (±'+Math.round(p.coords.accuracy)+' m). Geser peta untuk menyesuaikan, lalu ketuk Tambah lokasi.','ok')}catch(e){st('#sst',gerr(e),'bad')}};
+$('#mapt').onclick=function(){if(!map)return;sat=!sat;map.removeLayer(sat?tiles.s:tiles.t);tiles[sat?'t':'s'].addTo(map);this.textContent=sat?'🗺️ Tampilan peta':'🛰️ Tampilan satelit'};
+$('#qb').onclick=async function(){var q=$('#q').value.trim();if(!q)return;st('#sst','Mencari…');
+  try{var r=await(await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q))).json();
+    if(!r.length)return st('#sst','Tidak ditemukan. Coba kata pencarian lain.','bad');goTo(+r[0].lat,+r[0].lon,17);st('#sst','Ditemukan. Geser peta ke titik yang tepat.','ok')}catch(e){st('#sst','Pencarian gagal. Geser peta secara manual.','bad')}};
+$('#lat').oninput=function(){var m=this.value.split(',');if(m.length===2){this.value=m[0].trim();$('#lng').value=m[1].trim()}};
+function fromInputs(){var a=parseFloat($('#lat').value),b=parseFloat($('#lng').value);if(isFinite(a)&&isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180)goTo(a,b,map&&map.getZoom()<15?17:0)}
+$('#lat').onchange=$('#lng').onchange=fromInputs;
+$('#rad').oninput=function(){if(ring&&+this.value>0)ring.setRadius(+this.value)};
+function endEdit(){editI=-1;$('#nm').value='';$('#add').textContent='Tambah lokasi';$('#cx').hidden=true;$('#lh').textContent='Tambah lokasi'}
+function startEdit(i){var s=cfg.sites[i];if(!s)return;editI=i;
+  $('#nm').value=s.name;$('#lat').value=s.lat;$('#lng').value=s.lng;$('#rad').value=s.radius;if(ring)ring.setRadius(+s.radius);goTo(+s.lat,+s.lng,17);
+  $('#add').textContent='Simpan perubahan';$('#cx').hidden=false;$('#lh').textContent='Ubah: '+s.name;
+  st('#sst','Geser peta untuk memindahkan pin, ubah nama atau radius, lalu ketuk Simpan perubahan.');render();$('#lh').scrollIntoView({behavior:'smooth',block:'start'})}
+$('#add').onclick=function(){
+  var lat=parseFloat($('#lat').value),lng=parseFloat($('#lng').value),rad=parseInt($('#rad').value,10),n=$('#nm').value.trim()||'Lokasi kerja';
+  if(!isFinite(lat)||!isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180||!(rad>=10)){st('#sst','Masukkan latitude, longitude yang valid dan radius minimal 10 m.','bad');return}
+  var o={name:n,lat:lat,lng:lng,radius:rad};
+  if(editI>=0&&cfg.sites[editI]){var k=editI;cfg.sites=cfg.sites.map(function(s,j){return j===k?o:s});endEdit();save('#sst','Lokasi diperbarui.')}
+  else{cfg.sites=cfg.sites.concat([o]);$('#nm').value='';save('#sst','Lokasi ditambahkan.')}};
+$('#cx').onclick=function(){endEdit();st('#sst','Perubahan dibatalkan.');render()};
+$('#sites').onclick=function(e){var d=e.target.dataset;
+  if(d.e!=null)return startEdit(+d.e);
+  if(d.rm==null)return;var i=+d.rm,s=cfg.sites[i];
+  if(!s||!confirm('Hapus '+s.name+'? Pekerja tidak akan bisa check-in di sana lagi. Catatan lama tetap tersimpan.'))return;
+  if(editI===i)endEdit();else if(editI>i)editI--;
+  cfg.sites=cfg.sites.filter(function(_,j){return j!==i});save('#sst','Lokasi dihapus.')};
+$('#lt').onchange=function(){if(this.value){cfg.lateAfter=this.value;save('#lst','Batas waktu terlambat disimpan.')}};
+$('#wadd').onclick=function(){var n=$('#wnm').value.trim();if(!n)return;
+  cfg.workers=cfg.workers.concat([{id:'w'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:n}]);$('#wnm').value='';save('#wst','Pekerja ditambahkan.')};
+function saveName(id){var inp=$('#wk').querySelector('input[data-n="'+id+'"]'),v=inp&&inp.value.trim();
+  if(!v)return st('#wst','Nama tidak boleh kosong.','bad');
+  cfg.workers=cfg.workers.map(function(w){return w.id===id?{id:w.id,name:v}:w});save('#wst','Nama diperbarui.')}
+$('#wk').onclick=function(e){var d=e.target.dataset;
+  if(d.r!=null){var w=cfg.workers.filter(function(x){return x.id===d.r})[0];if(!w||!confirm('Hapus '+w.name+'? Catatan lama mereka tetap ada di laporan.'))return;
+    cfg.gone=Object.assign({},cfg.gone,{[d.r]:w.name});cfg.workers=cfg.workers.filter(function(x){return x.id!==d.r});save('#wst','Pekerja dihapus.')}
+  else if(d.s!=null)saveName(d.s)};
+$('#old').onclick=async function(e){var id=e.target.dataset.o;if(!id)return;
+  if(!confirm('Hapus semua catatan '+nameOf(id)+'? Tindakan ini tidak dapat dibatalkan.'))return;
+  var keys=Object.keys(recs[id]||{}),fail=0;st('#wst','Menghapus…');
+  for(var i=0;i<keys.length;i++){try{await A.delRec(id+'_'+keys[i])}catch(x){fail++}}
+  if(fail){cfg.hid=(cfg.hid||[]).concat([id]);await save('#wst','Disembunyikan. Database tidak mengizinkan penghapusan, sehingga catatan tetap tersimpan tetapi tidak ditampilkan lagi.')}
+  else st('#wst','Catatan dihapus.','ok');render()};
+$('#wk').onkeydown=function(e){if(e.key==='Enter'&&e.target.dataset.n!=null){e.preventDefault();var id=e.target.dataset.n;e.target.blur();saveName(id)}};
+function csv(v){v=String(v);return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function allRecs(){var list=[];Object.keys(recs).forEach(function(w){Object.keys(recs[w]).forEach(function(k){list.push(recs[w][k])})});
+  list.sort(function(x,y){return x.date<y.date?-1:x.date>y.date?1:nameOf(x.wid)<nameOf(y.wid)?-1:1});return list}
+function dl(name,text,type){var u=URL.createObjectURL(new Blob([text],{type:type})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},1000)}
+$('#exc').onclick=function(){
+  var rows=['tanggal,pekerja,lokasi,jam masuk,jam pulang,terlambat,jam kerja,izin,catatan,alasan terlambat'],list=allRecs();
+  list.forEach(function(r){if(!(r.in||r.leave||r.lnote))return;
+    rows.push([r.date,nameOf(r.wid),r.site||'',r.in?hm(r.in):'',r.out?hm(r.out):'',r.in&&isLate(r.in)?'ya':'tidak',r.in&&r.out?((r.out-r.in)/3600000).toFixed(2):'',r.leave==='sick'?'sakit':r.leave?'izin lain':'',r.note||'',r.lnote||''].map(csv).join(','))});
+  dl('absensi-'+ds(new Date())+'.csv','\ufeff'+rows.join('\r\n'),'text/csv;charset=utf-8');st('#exst','File Excel (CSV) diunduh: '+(rows.length-1)+' baris.','ok')};
+$('#exj').onclick=function(){
+  var d={app:'worker-attendance',exported:new Date().toISOString(),sites:cfg.sites,lateAfter:cfg.lateAfter,workers:cfg.workers,gone:cfg.gone||{},week:cfg.week,records:allRecs()};
+  dl('absensi-cadangan-'+ds(new Date())+'.json',JSON.stringify(d,null,1),'application/json');st('#exst','Cadangan diunduh: '+d.records.length+' catatan.','ok')};
+$('#imb').onclick=function(){$('#imf').click()};
+$('#imf').onchange=function(){var f=this.files[0],inp=this;if(!f)return;var rd=new FileReader();
+  rd.onerror=function(){st('#exst','Tidak dapat membaca file tersebut.','bad')};
+  rd.onload=async function(){
+    try{
+      var d=JSON.parse(rd.result);
+      if(!d||!Array.isArray(d.records)||!Array.isArray(d.workers)||!Array.isArray(d.sites))throw new Error('Ini bukan file cadangan dari aplikasi ini.');
+      var L2=d.records.filter(function(r){return r&&r.wid&&r.date});
+      if(!confirm('Impor '+d.workers.length+' pekerja, '+d.sites.length+' lokasi, dan '+L2.length+' catatan? Hari yang sama akan ditimpa. PIN owner Anda tidak berubah.'))return;
+      st('#exst','Mengimpor…');
+      cfg.sites=d.sites;cfg.workers=d.workers;cfg.lateAfter=d.lateAfter||cfg.lateAfter;cfg.week=d.week||cfg.week;cfg.gone=Object.assign({},cfg.gone,d.gone);
+      await A.setCfg(cfg);
+      for(var i=0;i<L2.length;i+=20)await Promise.all(L2.slice(i,i+20).map(function(r){return A.setRec(r.wid+'_'+r.date,r)}));
+      st('#exst','Berhasil mengimpor '+L2.length+' catatan.','ok');
+    }catch(e){st('#exst',(e instanceof SyntaxError?'File ini bukan JSON yang valid.':e.message)||'Impor gagal','bad')}
+    finally{inp.value=''}};
+  rd.readAsText(f)};
+$('#lvd').value=ds(new Date());
+$('#lvb').onclick=async function(){var w=$('#lvw').value,d=$('#lvd').value,t=$('#lvt').value,n=$('#lvn').value.trim();if(!w||!d)return st('#lvs','Pilih pekerja dan tanggal.','bad');
+  var o={wid:w,date:d};if(t==='late')o.lnote=n;else{o.leave=t;o.note=n}
+  try{await A.setRec(w+'_'+d,o);$('#lvn').value='';st('#lvs',t==='late'?'Alasan terlambat disimpan.':'Catatan disimpan.','ok')}catch(e){st('#lvs','Gagal menyimpan: '+(e.message||e),'bad')}};
+async function delNote(e){var v=e.target.dataset.d;if(!v||!confirm('Hapus catatan ini?'))return;var a=v.split('|');try{await A.setRec(a[0]+'_'+a[1],{wid:a[0],date:a[1],leave:'',note:''})}catch(er){}}
+$('#mnotes').onclick=$('#alist').onclick=delNote;
+function shiftDay(n){var d=new Date((vd||ds(new Date()))+'T00:00:00');d.setDate(d.getDate()+n);vd=ds(d);render()}
+$('#dprev').onclick=function(){shiftDay(-1)};$('#dnext').onclick=function(){shiftDay(1)};$('#dtoday').onclick=function(){vd=ds(new Date());render()};
+$('#atd').onchange=function(){if(this.value){vd=this.value;render()}};
+$('#tabs').onclick=function(e){var t=e.target.dataset.tab;if(!t)return;tab=t;try{sessionStorage.setItem('tab',t)}catch(x){}render();window.scrollTo(0,0);
+  if(t==='loc'&&map)setTimeout(function(){map.invalidateSize();fromCenter()},60)};
+$('#wwk').onchange=function(){cfg.week=this.value;save();render()};
+$('#prt').onclick=function(){window.print()};
+function need(test,urls,done){if(test()){done();return}var i=0;(function next(){if(i>=urls.length){done();return}var e=document.createElement('script');e.src=urls[i++];e.onload=function(){test()?done():next()};e.onerror=next;document.head.appendChild(e)})()}
+if(!window.L){var lk=document.createElement('link');lk.rel='stylesheet';lk.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(lk)}
+need(function(){return window.L},['https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'],function(){
+  if(!window.L){$('#map').innerHTML='<div class="mu" style="padding:16px">Peta tidak dapat dimuat (internet bermasalah atau situs diblokir). Anda tetap bisa mengetik latitude dan longitude di bawah.</div>';return}
+  if(isAdmin)render()});
+need(function(){return window.qrcode},['https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js'],function(){if(window.qrcode){lt=false;if(isAdmin)render()}});
+render();
+})();
+</script>
+</body>
+</html>
