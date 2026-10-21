@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f7a5a">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<title>Worker Attendance</title>
+<!--
+SETUP (shared data across phones):
+1. firebase.google.com > create project > Build > Firestore Database > create (test mode).
+2. Project settings > Your apps > Web (</>) > copy the firebaseConfig values into FIREBASE_CONFIG below.
+3. Upload this file to a GitHub repo, then Settings > Pages > deploy from main branch.
+Leave FIREBASE_CONFIG as null for demo mode (data stays on this device only).
+-->
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1a1d21;--mu:#6b7280;--bd:#e3e6ea;--ac:#1f7a5a;--ac2:#fff;--bad:#c0392b}
+@media(prefers-color-scheme:dark){:root{--bg:#14161a;--card:#1e2126;--tx:#eceef1;--mu:#9aa1ab;--bd:#2d3138;--ac:#3fb98b;--ac2:#08140f;--bad:#ff7b6b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:680px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+h1{font-size:22px;margin:8px 0 14px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+.mu{color:var(--mu);font-size:14px}
+button{font:inherit;border:0;border-radius:10px;padding:12px 16px;background:var(--ac);color:var(--ac2);font-weight:600;cursor:pointer}
+button.s{background:transparent;color:var(--tx);border:1px solid var(--bd);padding:8px 12px}
+button.x{padding:8px 10px;background:transparent;color:var(--bad);border:1px solid var(--bd)}
+button:disabled{opacity:.5}
+.big{width:100%;padding:18px;font-size:18px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:110px}
+input,select{font:inherit;width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
+label{display:block;font-size:13px;color:var(--mu);margin:8px 0 4px}
+.st{margin-top:10px;min-height:22px}.bad,.late{color:var(--bad)}.ok{color:var(--ac)}
+.sc{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 6px;text-align:center;border-bottom:1px solid var(--bd);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+.r{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
+.r input{flex:1}.r button{flex:none}
+hr{border:0;border-top:1px solid var(--bd);margin:14px 0}
+#mapw{position:relative;margin-top:10px}#map{height:320px;border-radius:12px;border:1px solid var(--bd);z-index:0}#cp{position:absolute;left:50%;top:50%;font-size:34px;line-height:1;transform:translate(-50%,-100%);pointer-events:none;z-index:2}
+.pin{font-size:28px;line-height:30px;background:none;border:0}
+a{color:var(--ac)}
+@media print{header,#demo,.card:not(#rep){display:none!important}#rep .noprint,#rep button,#rep select,#rep input{display:none}}
+#qr{background:#fff;padding:10px;border-radius:12px;display:inline-block;line-height:0}
+#qr svg{width:220px;height:220px}
+.adm{display:none}body.a .adm{display:block}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Worker Attendance</h1><button class="s" id="login">Boss login</button></header>
+<div id="demo" class="card mu" hidden>Demo mode: data is saved on this device only. Add your Firebase config in the file to share data between phones.</div>
+<div class="card">
+  <h2>My check-in</h2>
+  <label style="margin-top:0">Who are you?</label><select id="who"></select>
+  <div class="mu" id="site" style="margin-top:10px"></div>
+  <div id="today" style="margin:10px 0"></div>
+  <div class="row"><button class="big" id="pin">✅ Check in</button><button class="big" id="pout">🏁 Check out</button></div>
+  <div class="st" id="st"></div>
+</div>
+<div class="card adm"><h2>QR code for workers</h2><div id="qr"></div><div class="mu" id="qrl" style="word-break:break-all;margin-top:8px"></div></div>
+<div class="card adm"><h2>Workers</h2><div id="wk"></div>
+  <div class="row" style="margin-top:12px"><input id="wnm" placeholder="New worker name"><button id="wadd" style="flex:none">Add</button></div><div class="st" id="wst"></div></div>
+<div class="card adm"><h2>Work locations</h2><div id="sites"></div><hr>
+  <div class="row"><button class="s" id="gps">📍 Go to my GPS position</button><button class="s" id="mapt">🛰️ Satellite view</button></div>
+  <div class="row" style="margin-top:8px"><input id="q" placeholder="Search address or place"><button class="s" id="qb" style="flex:none">Search</button></div>
+  <div id="mapw"><div id="map"></div><div id="cp">📍</div></div>
+  <div class="mu" style="margin-top:6px">Drag the map so the pin 📍 sits on the exact spot (or tap the map), then tap Add location. <a id="gm" href="#" target="_blank" rel="noopener">Open in Google Maps</a></div>
+  <label>Place name</label><input id="nm" placeholder="e.g. Main site">
+  <div class="row"><div><label>Latitude</label><input id="lat" inputmode="decimal"></div><div><label>Longitude</label><input id="lng" inputmode="decimal"></div><div><label>Radius (m)</label><input id="rad" inputmode="numeric" value="100"></div></div>
+  <div class="row" style="margin-top:12px"><button id="add">Add location</button></div><hr>
+  <label>Late if checked in after</label><input id="lt" type="time" value="09:00" style="max-width:160px"><div class="st" id="sst"></div></div>
+<div class="card adm"><h2>Last 7 days</h2><div class="sc" id="tbl"></div><p class="mu">Red = late.</p></div>
+<div class="card adm"><h2>Leave / absence note</h2>
+  <div class="row"><select id="lvw"></select><input id="lvd" type="date"></div>
+  <div class="row" style="margin-top:8px"><select id="lvt"><option value="sick">Sick leave</option><option value="other">Other reason</option></select><input id="lvn" placeholder="Reason (optional)"></div>
+  <div class="row" style="margin-top:12px"><button id="lvb">Save note</button></div><div class="st" id="lvs"></div></div>
+<div class="card adm" id="rep"><h2>Monthly report</h2>
+  <div class="row noprint"><input id="mo" type="month"><select id="wwk"><option value="5">Work week: Mon–Fri</option><option value="6">Work week: Mon–Sat</option><option value="7">Work week: every day</option></select><button class="s" id="prt">🖨️ Print / PDF</button></div>
+  <div class="mu" id="mmeta" style="margin-top:8px"></div>
+  <div class="sc" id="mtbl" style="margin-top:10px"></div><div id="mnotes"></div></div>
+<div class="card adm"><h2>Sync to GitHub (owner)</h2>
+  <div class="mu">Saves a backup (data.json) and an Excel-ready file (attendance.csv) in a GitHub repo. Use a <b>private</b> repo: it contains worker names and times.</div>
+  <label>Repo (owner/name)</label><input id="ghr" placeholder="yourname/attendance-data">
+  <div class="row"><div><label>Branch</label><input id="ghb" value="main"></div><div><label>Access token</label><input id="ght" type="password" placeholder="github_pat_..." autocomplete="off"></div></div>
+  <div class="row" style="margin-top:12px"><button class="s" id="ghs">Save settings</button><button id="ghp">⬆️ Sync now</button><button class="s" id="ghl">⬇️ Restore</button></div>
+  <div class="st" id="ghst"></div>
+  <div class="mu">Token: GitHub &gt; Settings &gt; Developer settings &gt; Fine-grained tokens, only that repo, permission Contents: Read and write. It is stored only in this browser.</div></div>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB_RyveAgP-VNPqMejqhOAbwxT9NZel_L0",
+  authDomain: "absensi-cenderawasih-3.firebaseapp.com",
+  projectId: "absensi-cenderawasih-3",
+  storageBucket: "absensi-cenderawasih-3.firebasestorage.app",
+  messagingSenderId: "857719343353",
+  appId: "1:857719343353:web:09ec127ec608f97f023a28"
+};
+(function(){
+var $=function(s){return document.querySelector(s)},A,demo=false;
+var cfg={sites:[],lateAfter:'09:00',workers:[],pin:''},recs={},sel='',busy=false,isAdmin=false,sig=null,lt=false,map,mk,ring,sat=false,tiles={};
+try{sel=localStorage.getItem('wid')||'';isAdmin=sessionStorage.getItem('adm')==='1'}catch(e){}
+if(FIREBASE_CONFIG&&window.firebase){
+  firebase.initializeApp(FIREBASE_CONFIG);var f=firebase.firestore();
+  A={cfg:function(cb){f.doc('config/main').onSnapshot(function(s){cb(s.exists?s.data():null)})},
+     recs:function(cb){f.collection('attendance').onSnapshot(function(q){cb(q.docs.map(function(d){return d.data()}))})},
+     setCfg:function(o){return f.doc('config/main').set(o)},
+     setRec:function(id,o){return f.doc('attendance/'+id).set(o,{merge:true})}};
+}else{
+  demo=true;var cb={},L=function(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}};
+  A={cfg:function(c){cb.c=c;c(L('cfg'))},recs:function(c){cb.r=c;c(Object.values(L('recs')||{}))},
+     setCfg:function(o){localStorage.setItem('cfg',JSON.stringify(o));cb.c(o);return Promise.resolve()},
+     setRec:function(id,o){var r=L('recs')||{};r[id]=Object.assign({},r[id],o);localStorage.setItem('recs',JSON.stringify(r));cb.r(Object.values(r));return Promise.resolve()}};
+  $('#demo').hidden=false;
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function ds(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function hm(t){return new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+function isLate(t){var d=new Date(t),p=cfg.lateAfter.split(':');return d.getHours()*60+d.getMinutes()>(+p[0])*60+(+p[1])}
+function hav(a,b,c,d){var R=6371000,r=Math.PI/180,x=(c-a)*r,y=(d-b)*r,h=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)*Math.sin(y/2);return 2*R*Math.asin(Math.sqrt(h))}
+function pos(){return new Promise(function(a,b){if(!navigator.geolocation)return b({message:'GPS is not supported on this device.'});navigator.geolocation.getCurrentPosition(a,b,{enableHighAccuracy:true,timeout:20000,maximumAge:0})})}
+function st(id,t,c){var e=$(id);e.textContent=t;e.className='st '+(c||'')}
+function gerr(e){return e&&e.code===1?'Location permission denied. Please allow location access and try again.':(e&&e.message)||'Could not get your GPS position.'}
+function sha(s){if(!window.crypto||!crypto.subtle)return Promise.resolve('p:'+s);return crypto.subtle.digest('SHA-256',new TextEncoder().encode('att:'+s)).then(function(b){return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')})}
+function save(id,ok){return A.setCfg(cfg).then(function(){if(id)st(id,ok,'ok')}).catch(function(e){st(id||'#st','Could not save: '+(e.message||e),'bad')})}
+function nameOf(id){var w=cfg.workers.filter(function(x){return x.id===id})[0];return w?w.name:'(removed)'}
+function cell(r){return r&&r.in?'<span class="'+(isLate(r.in)?'late':'')+'">✓ '+hm(r.in)+'</span>':r&&r.leave?'<span class="mu">'+(r.leave==='sick'?'Sick':'Leave')+'</span>':'–'}
+
+function render(){
+  document.body.className=isAdmin?'a':'';$('#login').textContent=isAdmin?'Log out':'Boss login';
+  var s2=cfg.workers.map(function(w){return w.id+w.name}).join('|');
+  if(s2!==sig){sig=s2;var wo=cfg.workers.map(function(w){return'<option value="'+esc(w.id)+'">'+esc(w.name)+'</option>'}).join('');$('#who').innerHTML='<option value="">Choose your name…</option>'+wo;$('#lvw').innerHTML='<option value="">Worker…</option>'+wo}
+  if(!cfg.workers.some(function(w){return w.id===sel}))sel='';
+  $('#who').value=sel;
+  $('#site').textContent=(cfg.sites.length?'Allowed: '+cfg.sites.map(function(s){return s.name+' ('+s.radius+' m)'}).join(', '):'No work location set yet.')+(cfg.workers.length?'':' No worker names added yet.');
+  var d=sel?((recs[sel]||{})[ds(new Date())]||{}):{},t=$('#today'),ok=!busy&&cfg.sites.length&&sel;
+  if(!sel)t.textContent='Choose your name above.';
+  else if(d.out)t.textContent='✅ In '+hm(d.in)+(isLate(d.in)?' (late)':'')+' · out '+hm(d.out)+' · worked '+((d.out-d.in)/3600000).toFixed(1)+' h';
+  else if(d.in)t.textContent='✅ Checked in at '+hm(d.in)+(isLate(d.in)?' (late)':'')+'. Tap Check out when you finish.';
+  else t.textContent='Not checked in today.';
+  $('#pin').disabled=!ok||!!d.in;$('#pout').disabled=!ok||!d.in||!!d.out;
+  if(!isAdmin)return;initMap();
+  if(!lt){lt=true;$('#lt').value=cfg.lateAfter;$('#wwk').value=cfg.week||'5';var u=location.origin+location.pathname;$('#qrl').textContent=u;
+    try{var q=qrcode(0,'M');q.addData(u);q.make();$('#qr').innerHTML=q.createSvgTag(6,0)}catch(e){$('#qr').textContent='QR failed to load. Share the link instead.'}}
+  $('#sites').innerHTML=cfg.sites.length?cfg.sites.map(function(s,i){return'<div class="r"><span><b>'+esc(s.name)+'</b><br><span class="mu">'+(+s.lat).toFixed(5)+', '+(+s.lng).toFixed(5)+' · '+s.radius+' m</span></span><button class="x" data-i="'+i+'">Remove</button></div>'}).join(''):'<div class="mu">No locations yet.</div>';
+  var ae=document.activeElement;if(!(ae&&ae.tagName==='INPUT'&&$('#wk').contains(ae)))$('#wk').innerHTML=cfg.workers.length?cfg.workers.map(function(w){return'<div class="r"><input data-n="'+esc(w.id)+'" value="'+esc(w.name)+'"><button class="s" data-s="'+esc(w.id)+'">Save</button><button class="x" data-r="'+esc(w.id)+'">Remove</button></div>'}).join(''):'<div class="mu">No workers yet.</div>';
+  var ids=cfg.workers.map(function(w){return w.id});Object.keys(recs).forEach(function(k){if(ids.indexOf(k)<0)ids.push(k)});
+  var days=[];for(var i=0;i<7;i++){var x=new Date();x.setDate(x.getDate()-i);days.push(ds(x))}
+  var h='<table><tr><th>Worker</th>'+days.map(function(k){return'<th>'+k.slice(5)+'</th>'}).join('')+'</tr>';
+  ids.forEach(function(id){h+='<tr><td>'+esc(nameOf(id))+'</td>'+days.map(function(k){return'<td>'+cell((recs[id]||{})[k])+'</td>'}).join('')+'</tr>'});
+  $('#tbl').innerHTML=ids.length?h+'</table>':'<span class="mu">No workers yet.</span>';
+  var mo=$('#mo').value||ds(new Date()).slice(0,7),y=+mo.slice(0,4),mm=+mo.slice(5,7)-1,wkn=+cfg.week||5,td=ds(new Date()),wd=[];
+  for(var dd=new Date(y,mm,1);dd.getMonth()===mm;dd.setDate(dd.getDate()+1)){var g=dd.getDay(),wok=wkn===7||(g>=1&&g<=(wkn===6?6:5));if(wok&&ds(dd)<=td)wd.push(ds(dd))}
+  $('#mmeta').textContent='Work days counted so far: '+wd.length+'. Absent = a work day with no check-in and no leave note.';
+  var m='<table><tr><th>Worker</th><th>Present</th><th>Late</th><th>Absent</th><th>Sick</th><th>Other</th><th>Hours</th><th>Attend.</th></tr>',nt=[],rows=0;
+  ids.forEach(function(id){
+    var R=recs[id]||{},p=0,l=0,ab=0,sk=0,ot=0,ms=0,has=Object.keys(R).some(function(k){return k.slice(0,7)===mo});
+    if(!has&&!cfg.workers.some(function(w){return w.id===id}))return;
+    Object.keys(R).forEach(function(k){if(k.slice(0,7)!==mo)return;var r=R[k];
+      if(r.in){p++;if(isLate(r.in))l++;if(r.out)ms+=r.out-r.in}
+      if(r.leave){if(r.leave==='sick')sk++;else ot++;nt.push({k:k,id:id,r:r})}});
+    wd.forEach(function(k){var r=R[k];if(!(r&&(r.in||r.leave)))ab++});
+    rows++;m+='<tr><td>'+esc(nameOf(id))+'</td><td>'+p+'</td><td class="'+(l?'late':'')+'">'+l+'</td><td class="'+(ab?'late':'')+'">'+ab+'</td><td>'+sk+'</td><td>'+ot+'</td><td>'+(ms/3600000).toFixed(1)+'</td><td>'+(wd.length?Math.round(p/wd.length*100)+'%':'–')+'</td></tr>'});
+  $('#mtbl').innerHTML=rows?m+'</table>':'<span class="mu">No workers yet.</span>';
+  nt.sort(function(a,b){return a.k<b.k?-1:1});
+  $('#mnotes').innerHTML=nt.length?'<h2 style="margin-top:16px">Leave notes</h2>'+nt.map(function(n){return'<div class="r"><span><b>'+n.k.slice(5)+'</b> · '+esc(nameOf(n.id))+' · '+(n.r.leave==='sick'?'Sick leave':'Other reason')+(n.r.note?'<br><span class="mu">'+esc(n.r.note)+'</span>':'')+'</span><button class="x noprint" data-d="'+esc(n.id+'|'+n.k)+'">Delete</button></div>'}).join(''):'';
+}
+
+async function punch(kind){
+  var k=ds(new Date()),cur=(recs[sel]||{})[k]||{};
+  if(!cfg.sites.length||!sel)return;busy=true;render();st('#st','Getting your GPS position…');
+  try{
+    var c=(await pos()).coords,best=null;
+    cfg.sites.forEach(function(s){var d=hav(c.latitude,c.longitude,s.lat,s.lng);if(!best||d<best.d)best={s:s,d:d}});
+    if(best.d>best.s.radius){st('#st','Too far: you are '+Math.round(best.d)+' m from '+best.s.name+' (nearest). Move within '+best.s.radius+' m.','bad');return}
+    var o={wid:sel,date:k};
+    if(kind==='in'){if(cur.in)return;o.in=Date.now();o.dist=Math.round(best.d);o.site=best.s.name}
+    else{if(!cur.in||cur.out)return;o.out=Date.now()}
+    await A.setRec(sel+'_'+k,o);st('#st',(kind==='in'?'Checked in at ':'Checked out at ')+best.s.name+'.','ok');
+  }catch(e){st('#st',e&&e.code&&typeof e.code==='number'&&e.code<4?gerr(e):'Error: '+(e.message||e),'bad')}
+  finally{busy=false;render()}
+}
+
+A.cfg(function(d){d=d||{};cfg={sites:d.sites||[],lateAfter:d.lateAfter||'09:00',workers:d.workers||[],pin:d.pin||'',week:d.week||'5'};render()});
+A.recs(function(a){recs={};a.forEach(function(d){recs[d.wid]=recs[d.wid]||{};recs[d.wid][d.date]=d});render()});
+$('#mo').value=ds(new Date()).slice(0,7);$('#mo').onchange=render;
+$('#who').onchange=function(){sel=this.value;try{localStorage.setItem('wid',sel)}catch(e){}render()};
+$('#pin').onclick=function(){punch('in')};$('#pout').onclick=function(){punch('out')};
+$('#login').onclick=async function(){
+  if(isAdmin){isAdmin=false;try{sessionStorage.removeItem('adm')}catch(e){}return render()}
+  var p=prompt(cfg.pin?'Boss PIN:':'Create a boss PIN (you will use it to log in):');if(!p)return;
+  var h=await sha(p);
+  if(!cfg.pin){cfg.pin=h;await save()}else if(h!==cfg.pin){alert('Wrong PIN');return}
+  isAdmin=true;try{sessionStorage.setItem('adm','1')}catch(e){}render();
+};
+function setPin(lat,lng){
+  $('#lat').value=lat.toFixed(6);$('#lng').value=lng.toFixed(6);$('#gm').href='https://www.google.com/maps?q='+lat+','+lng;
+  if(ring)ring.setLatLng([lat,lng]);
+}
+function fromCenter(){if(!map)return;var c=map.getCenter();setPin(c.lat,c.lng)}
+function goTo(lat,lng,z){if(!map)return setPin(lat,lng);map.setView([lat,lng],z||map.getZoom());fromCenter()}
+function initMap(){
+  if(map||!window.L)return;
+  var c=cfg.sites[0];map=L.map('map').setView(c?[c.lat,c.lng]:[0,0],c?16:2);
+  tiles.s=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  tiles.t=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'});
+  var errs=0;tiles.s.on('tileerror',function(){if(++errs===4&&!sat){map.removeLayer(tiles.s);tiles.s=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}).addTo(map)}});
+  ring=L.circle(map.getCenter(),{radius:+$('#rad').value||100,weight:2,interactive:false}).addTo(map);
+  map.on('move',fromCenter);
+  map.on('click',function(e){map.panTo(e.latlng)});
+  if(c)fromCenter();
+  setTimeout(function(){map.invalidateSize();if(c)fromCenter()},150);
+}
+$('#gps').onclick=async function(){st('#sst','Getting GPS position…');
+  try{var p=await pos();goTo(p.coords.latitude,p.coords.longitude,18);st('#sst','Map moved to your GPS position (±'+Math.round(p.coords.accuracy)+' m). Drag the map to adjust, then tap Add location.','ok')}catch(e){st('#sst',gerr(e),'bad')}};
+$('#mapt').onclick=function(){if(!map)return;sat=!sat;map.removeLayer(sat?tiles.s:tiles.t);tiles[sat?'t':'s'].addTo(map);this.textContent=sat?'🗺️ Map view':'🛰️ Satellite view'};
+$('#qb').onclick=async function(){var q=$('#q').value.trim();if(!q)return;st('#sst','Searching…');
+  try{var r=await(await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q))).json();
+    if(!r.length)return st('#sst','Nothing found. Try a different search.','bad');goTo(+r[0].lat,+r[0].lon,17);st('#sst','Found. Drag the map to the exact spot.','ok')}catch(e){st('#sst','Search failed. Move the map by hand instead.','bad')}};
+$('#lat').oninput=function(){var m=this.value.split(',');if(m.length===2){this.value=m[0].trim();$('#lng').value=m[1].trim()}};
+function fromInputs(){var a=parseFloat($('#lat').value),b=parseFloat($('#lng').value);if(isFinite(a)&&isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180)goTo(a,b,map&&map.getZoom()<15?17:0)}
+$('#lat').onchange=$('#lng').onchange=fromInputs;
+$('#rad').oninput=function(){if(ring&&+this.value>0)ring.setRadius(+this.value)};
+$('#add').onclick=function(){
+  var lat=parseFloat($('#lat').value),lng=parseFloat($('#lng').value),rad=parseInt($('#rad').value,10),n=$('#nm').value.trim()||'Work site';
+  if(!isFinite(lat)||!isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180||!(rad>=10)){st('#sst','Enter a valid latitude, longitude and a radius of at least 10 m.','bad');return}
+  cfg.sites=cfg.sites.concat([{name:n,lat:lat,lng:lng,radius:rad}]);$('#nm').value='';save('#sst','Location added.')};
+$('#sites').onclick=function(e){var i=e.target.dataset.i;if(i==null)return;cfg.sites=cfg.sites.filter(function(_,j){return j!==+i});save('#sst','Location removed.')};
+$('#lt').onchange=function(){if(this.value){cfg.lateAfter=this.value;save('#sst','Late time saved.')}};
+$('#wadd').onclick=function(){var n=$('#wnm').value.trim();if(!n)return;
+  cfg.workers=cfg.workers.concat([{id:'w'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:n}]);$('#wnm').value='';save('#wst','Worker added.')};
+function saveName(id){var inp=$('#wk').querySelector('input[data-n="'+id+'"]'),v=inp&&inp.value.trim();
+  if(!v)return st('#wst','Name cannot be empty.','bad');
+  cfg.workers=cfg.workers.map(function(w){return w.id===id?{id:w.id,name:v}:w});save('#wst','Name updated.')}
+$('#wk').onclick=function(e){var d=e.target.dataset;
+  if(d.r!=null){var w=cfg.workers.filter(function(x){return x.id===d.r})[0];if(!w||!confirm('Remove '+w.name+'? Past records stay in the tables.'))return;
+    cfg.workers=cfg.workers.filter(function(x){return x.id!==d.r});save('#wst','Worker removed.')}
+  else if(d.s!=null)saveName(d.s)};
+$('#wk').onkeydown=function(e){if(e.key==='Enter'&&e.target.dataset.n!=null){e.preventDefault();var id=e.target.dataset.n;e.target.blur();saveName(id)}};
+var GH={};try{GH=JSON.parse(localStorage.getItem('gh'))||{}}catch(e){}
+$('#ghr').value=GH.repo||'';$('#ghb').value=GH.br||'main';$('#ght').value=GH.tok||'';
+$('#ghs').onclick=function(){GH={repo:$('#ghr').value.trim(),br:$('#ghb').value.trim()||'main',tok:$('#ght').value.trim()};try{localStorage.setItem('gh',JSON.stringify(GH))}catch(e){}st('#ghst','Settings saved on this device.','ok')};
+function ghF(path,o){o=o||{};o.headers={Authorization:'Bearer '+GH.tok,Accept:'application/vnd.github+json'};return fetch('https://api.github.com/repos/'+GH.repo+'/contents/'+path+(o.method==='PUT'?'':'?ref='+encodeURIComponent(GH.br)),o)}
+function ghErr(r){return'GitHub error '+r.status+(r.status===401?' (token wrong or expired)':r.status===403?' (token lacks Contents write access)':r.status===404?' (repo or branch not found)':'')}
+async function ghPut(path,text,msg){
+  var sha,r=await ghF(path);
+  if(r.ok)sha=(await r.json()).sha;else if(r.status!==404)throw new Error(ghErr(r));
+  var b={message:msg,content:btoa(unescape(encodeURIComponent(text))),branch:GH.br};if(sha)b.sha=sha;
+  var w=await ghF(path,{method:'PUT',body:JSON.stringify(b)});if(!w.ok)throw new Error(ghErr(w));
+}
+function csv(v){v=String(v);return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+$('#ghp').onclick=async function(){
+  if(!GH.repo||!GH.tok)return st('#ghst','Enter the repo and token, then tap Save settings.','bad');
+  st('#ghst','Syncing…');
+  try{
+    var list=[],rows=['date,worker,place,check in,check out,late,hours,leave,note'];
+    Object.keys(recs).forEach(function(w){Object.keys(recs[w]).forEach(function(k){var r=recs[w][k];list.push(r);
+      rows.push([k,nameOf(w),r.site||'',r.in?hm(r.in):'',r.out?hm(r.out):'',r.in&&isLate(r.in)?'yes':'no',r.in&&r.out?((r.out-r.in)/3600000).toFixed(2):'',r.leave==='sick'?'sick leave':r.leave?'other leave':'',r.note||''].map(csv).join(','))})});
+    var d={synced:new Date().toISOString(),sites:cfg.sites,lateAfter:cfg.lateAfter,workers:cfg.workers,week:cfg.week,records:list};
+    await ghPut('attendance-data/data.json',JSON.stringify(d,null,1),'Attendance sync '+ds(new Date()));
+    await ghPut('attendance-data/attendance.csv',rows.join('\n'),'Attendance CSV '+ds(new Date()));
+    st('#ghst','Synced '+list.length+' records at '+hm(Date.now())+'.','ok');
+  }catch(e){st('#ghst',e.message||'Sync failed','bad')}
+};
+$('#ghl').onclick=async function(){
+  if(!GH.repo||!GH.tok)return st('#ghst','Enter the repo and token, then tap Save settings.','bad');
+  if(!confirm('Load workers, locations and records from GitHub? This updates what is saved now.'))return;
+  st('#ghst','Restoring…');
+  try{
+    var r=await ghF('attendance-data/data.json');if(!r.ok)throw new Error(r.status===404?'No backup found in that repo yet.':ghErr(r));
+    var j=await r.json();if(!j.content)throw new Error('Backup file is too large to restore here.');
+    var d=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,'')))));
+    cfg.sites=d.sites||[];cfg.lateAfter=d.lateAfter||'09:00';cfg.workers=d.workers||[];cfg.week=d.week||cfg.week;await A.setCfg(cfg);
+    var L2=d.records||[];for(var i=0;i<L2.length;i++)await A.setRec(L2[i].wid+'_'+L2[i].date,L2[i]);
+    st('#ghst','Restored '+L2.length+' records.','ok');
+  }catch(e){st('#ghst',e.message||'Restore failed','bad')}
+};
+$('#lvd').value=ds(new Date());
+$('#lvb').onclick=async function(){var w=$('#lvw').value,d=$('#lvd').value;if(!w||!d)return st('#lvs','Choose a worker and a date.','bad');
+  try{await A.setRec(w+'_'+d,{wid:w,date:d,leave:$('#lvt').value,note:$('#lvn').value.trim()});$('#lvn').value='';st('#lvs','Note saved.','ok')}catch(e){st('#lvs','Could not save: '+(e.message||e),'bad')}};
+$('#mnotes').onclick=async function(e){var v=e.target.dataset.d;if(!v||!confirm('Delete this note?'))return;var a=v.split('|');try{await A.setRec(a[0]+'_'+a[1],{wid:a[0],date:a[1],leave:'',note:''})}catch(er){}};
+$('#wwk').onchange=function(){cfg.week=this.value;save();render()};
+$('#prt').onclick=function(){window.print()};
+function need(test,urls,done){if(test()){done();return}var i=0;(function next(){if(i>=urls.length){done();return}var e=document.createElement('script');e.src=urls[i++];e.onload=function(){test()?done():next()};e.onerror=next;document.head.appendChild(e)})()}
+if(!window.L){var lk=document.createElement('link');lk.rel='stylesheet';lk.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(lk)}
+need(function(){return window.L},['https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'],function(){
+  if(!window.L){$('#map').innerHTML='<div class="mu" style="padding:16px">The map could not load (internet or blocked site). You can still type the latitude and longitude below.</div>';return}
+  if(isAdmin)render()});
+need(function(){return window.qrcode},['https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js'],function(){if(window.qrcode){lt=false;if(isAdmin)render()}});
+render();
+})();
+</script>
+</body>
+</html>
