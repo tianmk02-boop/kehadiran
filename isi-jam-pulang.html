@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Isi Jam Pulang 16:25</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:760px;margin:auto;background:#f6f7f9;color:#111}
+h1{font-size:20px}button{font-size:16px;padding:12px 16px;border:0;border-radius:10px;background:#c8102e;color:#fff;margin:6px 0}
+button:disabled{opacity:.5}input[type=password]{font-size:16px;padding:10px;border:1px solid #bbb;border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}td,th{border:1px solid #ddd;padding:4px 6px;text-align:left}
+.ok{color:#0a7a2f}.bad{color:#c00}.mu{color:#666}#log{white-space:pre-wrap;font-size:13px}
+</style></head><body>
+<h1>Isi Jam Pulang dari Excel</h1>
+<p class="mu">Jam pulang yang kosong akan diisi <b>16:25</b>. Jam masuk yang belum ada di aplikasi diisi dari Excel.</p>
+<div id="s1">
+<input id="pin" type="password" inputmode="numeric" placeholder="PIN owner"> <button id="go">Cek data</button>
+</div>
+<label><input type="checkbox" id="ow"> Timpa juga jam pulang yang sudah ada (jadi 16:25 semua)</label>
+<div id="log"></div><div id="tb"></div>
+<button id="apply" hidden>Simpan ke aplikasi</button>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+var DATA=[{"n": "DEDY", "d": "2026-10-20", "i": "08:00", "o": "07:59"}, {"n": "DEDY", "d": "2026-10-19", "i": "08:04", "o": ""}, {"n": "DEDY", "d": "2026-10-17", "i": "07:56", "o": "17:18"}, {"n": "DEDY", "d": "2026-10-16", "i": "07:59", "o": ""}, {"n": "DEDY", "d": "2026-10-15", "i": "07:59", "o": ""}, {"n": "DEDY", "d": "2026-10-14", "i": "08:00", "o": ""}, {"n": "DEDY", "d": "2026-10-13", "i": "07:51", "o": ""}, {"n": "DEDY", "d": "2026-10-12", "i": "07:53", "o": ""}, {"n": "DEDY", "d": "2026-10-10", "i": "07:53", "o": "16:25"}, {"n": "DEDY", "d": "2026-10-09", "i": "08:04", "o": "16:28"}, {"n": "DEDY", "d": "2026-10-08", "i": "08:04", "o": "16:25"}, {"n": "DEDY", "d": "2026-10-07", "i": "07:59", "o": "16:16"}, {"n": "DEDY", "d": "2026-10-06", "i": "08:01", "o": "10:25"}, {"n": "DEDY", "d": "2026-10-05", "i": "07:58", "o": "17:37"}, {"n": "DEDY", "d": "2026-10-03", "i": "07:58", "o": "16:27"}, {"n": "DEDY", "d": "2026-10-02", "i": "08:19", "o": "16:25"}, {"n": "DEDY", "d": "2026-10-01", "i": "08:02", "o": "07:52"}, {"n": "DEDY", "d": "2026-09-30", "i": "15:39", "o": "15:40"}, {"n": "IMANUEL", "d": "2026-10-03", "i": "08:25", "o": "09:06"}, {"n": "IMANUEL", "d": "2026-10-02", "i": "08:35", "o": "16:21"}, {"n": "IMANUEL", "d": "2026-10-01", "i": "08:03", "o": "08:01"}, {"n": "IMANUEL", "d": "2026-09-30", "i": "15:48", "o": ""}, {"n": "KELVIN", "d": "2026-10-20", "i": "09:05", "o": ""}, {"n": "KELVIN", "d": "2026-10-17", "i": "12:49", "o": "17:17"}, {"n": "KELVIN", "d": "2026-10-16", "i": "09:14", "o": ""}, {"n": "KELVIN", "d": "2026-10-15", "i": "07:58", "o": ""}, {"n": "KELVIN", "d": "2026-10-14", "i": "07:59", "o": ""}, {"n": "KELVIN", "d": "2026-10-13", "i": "07:58", "o": ""}, {"n": "KELVIN", "d": "2026-10-12", "i": "08:05", "o": "16:33"}, {"n": "KELVIN", "d": "2026-10-10", "i": "07:59", "o": "16:25"}, {"n": "KELVIN", "d": "2026-10-09", "i": "08:05", "o": "16:28"}, {"n": "KELVIN", "d": "2026-10-08", "i": "07:51", "o": "16:16"}, {"n": "KELVIN", "d": "2026-10-07", "i": "10:14", "o": "16:16"}, {"n": "KELVIN", "d": "2026-10-06", "i": "07:51", "o": "10:25"}, {"n": "KELVIN", "d": "2026-10-05", "i": "08:05", "o": "16:31"}, {"n": "KELVIN", "d": "2026-10-02", "i": "09:09", "o": "16:30"}, {"n": "KELVIN", "d": "2026-10-01", "i": "08:02", "o": ""}, {"n": "KELVIN", "d": "2026-09-30", "i": "15:59", "o": ""}, {"n": "RYANDI", "d": "2026-10-21", "i": "08:25", "o": "16:36"}, {"n": "RYANDI", "d": "2026-10-20", "i": "08:03", "o": ""}, {"n": "RYANDI", "d": "2026-10-17", "i": "08:03", "o": "17:17"}, {"n": "RYANDI", "d": "2026-10-16", "i": "08:02", "o": "16:46"}, {"n": "RYANDI", "d": "2026-10-15", "i": "08:02", "o": "16:31"}, {"n": "RYANDI", "d": "2026-10-14", "i": "08:03", "o": "16:33"}, {"n": "RYANDI", "d": "2026-10-13", "i": "08:00", "o": ""}, {"n": "RYANDI", "d": "2026-10-12", "i": "08:06", "o": ""}, {"n": "RYANDI", "d": "2026-10-10", "i": "08:05", "o": "16:24"}, {"n": "RYANDI", "d": "2026-10-09", "i": "08:05", "o": "16:25"}, {"n": "RYANDI", "d": "2026-10-08", "i": "08:02", "o": "16:25"}, {"n": "RYANDI", "d": "2026-10-07", "i": "08:01", "o": "16:16"}, {"n": "RYANDI", "d": "2026-10-06", "i": "08:03", "o": "16:18"}, {"n": "RYANDI", "d": "2026-10-05", "i": "08:01", "o": "16:33"}, {"n": "RYANDI", "d": "2026-10-03", "i": "08:02", "o": "16:27"}, {"n": "RYANDI", "d": "2026-10-02", "i": "08:35", "o": "16:21"}, {"n": "RYANDI", "d": "2026-10-01", "i": "08:00", "o": "08:02"}, {"n": "RYANDI", "d": "2026-09-30", "i": "15:24", "o": "15:26"}, {"n": "ARGA", "d": "2026-10-21", "i": "16:42", "o": "16:42"}, {"n": "ARGA", "d": "2026-10-20", "i": "08:01", "o": "16:28"}, {"n": "ARGA", "d": "2026-10-19", "i": "08:05", "o": ""}, {"n": "ARGA", "d": "2026-10-08", "i": "08:02", "o": "16:25"}, {"n": "ARGA", "d": "2026-10-07", "i": "08:02", "o": "16:15"}, {"n": "ARGA", "d": "2026-10-06", "i": "08:02", "o": "16:18"}, {"n": "ARGA", "d": "2026-10-05", "i": "08:01", "o": "16:32"}, {"n": "ARGA", "d": "2026-10-03", "i": "08:03", "o": "09:05"}, {"n": "ARGA", "d": "2026-10-02", "i": "08:34", "o": "16:23"}, {"n": "ARGA", "d": "2026-10-01", "i": "08:15", "o": "07:57"}, {"n": "ODI", "d": "2026-10-20", "i": "08:04", "o": "08:06"}, {"n": "ODI", "d": "2026-10-19", "i": "08:06", "o": ""}, {"n": "ODI", "d": "2026-10-08", "i": "08:05", "o": "16:25"}, {"n": "ODI", "d": "2026-10-07", "i": "08:03", "o": "16:16"}, {"n": "ODI", "d": "2026-10-06", "i": "08:02", "o": "10:25"}, {"n": "ODI", "d": "2026-10-05", "i": "08:04", "o": "17:37"}, {"n": "ODI", "d": "2026-10-02", "i": "08:35", "o": "16:22"}, {"n": "ODI", "d": "2026-10-01", "i": "08:06", "o": "08:04"}, {"n": "ERYANZA", "d": "2026-10-21", "i": "08:22", "o": ""}, {"n": "ERYANZA", "d": "2026-10-20", "i": "08:04", "o": "16:17"}, {"n": "ERYANZA", "d": "2026-10-19", "i": "08:05", "o": "16:27"}, {"n": "ERYANZA", "d": "2026-10-17", "i": "08:00", "o": "17:18"}, {"n": "ERYANZA", "d": "2026-10-16", "i": "08:07", "o": ""}, {"n": "ERYANZA", "d": "2026-10-15", "i": "09:03", "o": ""}, {"n": "ERYANZA", "d": "2026-10-14", "i": "08:05", "o": ""}, {"n": "ERYANZA", "d": "2026-10-13", "i": "08:02", "o": ""}, {"n": "ERYANZA", "d": "2026-10-12", "i": "08:03", "o": ""}, {"n": "ERYANZA", "d": "2026-10-10", "i": "08:04", "o": "16:23"}, {"n": "ERYANZA", "d": "2026-10-09", "i": "08:02", "o": "16:28"}, {"n": "ERYANZA", "d": "2026-10-08", "i": "08:03", "o": "16:16"}, {"n": "ERYANZA", "d": "2026-10-07", "i": "08:01", "o": "16:21"}, {"n": "ERYANZA", "d": "2026-10-06", "i": "08:02", "o": "16:16"}, {"n": "ERYANZA", "d": "2026-10-05", "i": "07:58", "o": "16:27"}, {"n": "ERYANZA", "d": "2026-10-03", "i": "08:03", "o": "09:05"}, {"n": "ERYANZA", "d": "2026-10-02", "i": "08:35", "o": "16:21"}, {"n": "ERYANZA", "d": "2026-10-01", "i": "08:02", "o": "08:02"}, {"n": "ERYANZA", "d": "2026-09-30", "i": "15:53", "o": ""}, {"n": "SOFYAN", "d": "2026-10-20", "i": "08:03", "o": ""}, {"n": "SOFYAN", "d": "2026-10-19", "i": "08:05", "o": "16:34"}, {"n": "SOFYAN", "d": "2026-10-17", "i": "08:01", "o": "16:38"}, {"n": "SOFYAN", "d": "2026-10-16", "i": "08:03", "o": "16:54"}, {"n": "SOFYAN", "d": "2026-10-15", "i": "07:59", "o": "16:46"}, {"n": "SOFYAN", "d": "2026-10-14", "i": "07:57", "o": ""}, {"n": "SOFYAN", "d": "2026-10-13", "i": "07:55", "o": ""}, {"n": "SOFYAN", "d": "2026-10-12", "i": "07:58", "o": "16:33"}, {"n": "SOFYAN", "d": "2026-10-10", "i": "07:58", "o": "16:23"}, {"n": "SOFYAN", "d": "2026-10-08", "i": "08:02", "o": "16:26"}, {"n": "SOFYAN", "d": "2026-10-07", "i": "08:01", "o": "16:17"}, {"n": "SOFYAN", "d": "2026-10-06", "i": "08:02", "o": "16:18"}, {"n": "SOFYAN", "d": "2026-10-05", "i": "08:02", "o": "16:30"}, {"n": "SOFYAN", "d": "2026-09-30", "i": "16:06", "o": ""}, {"n": "FENCE", "d": "2026-10-20", "i": "08:14", "o": ""}, {"n": "FENCE", "d": "2026-10-19", "i": "08:13", "o": ""}, {"n": "FENCE", "d": "2026-10-17", "i": "08:03", "o": "17:17"}, {"n": "FENCE", "d": "2026-10-16", "i": "08:08", "o": ""}, {"n": "FENCE", "d": "2026-10-15", "i": "08:05", "o": ""}, {"n": "FENCE", "d": "2026-10-14", "i": "08:01", "o": ""}, {"n": "FENCE", "d": "2026-10-13", "i": "07:58", "o": ""}, {"n": "FENCE", "d": "2026-10-12", "i": "08:02", "o": ""}, {"n": "FENCE", "d": "2026-10-10", "i": "08:06", "o": "16:11"}, {"n": "FENCE", "d": "2026-10-08", "i": "08:18", "o": "16:16"}, {"n": "FENCE", "d": "2026-10-06", "i": "11:41", "o": "16:16"}, {"n": "FENCE", "d": "2026-10-05", "i": "08:09", "o": "16:29"}, {"n": "FENCE", "d": "2026-10-03", "i": "08:05", "o": "09:06"}, {"n": "FENCE", "d": "2026-10-02", "i": "08:19", "o": "16:23"}, {"n": "FENCE", "d": "2026-10-01", "i": "08:08", "o": "08:08"}, {"n": "FENCE", "d": "2026-09-30", "i": "15:34", "o": ""}];var OUT="16:25";
+firebase.initializeApp({apiKey:"AIzaSyB_RyveAgP-VNPqMejqhOAbwxT9NZel_L0",authDomain:"absensi-cenderawasih-3.firebaseapp.com",projectId:"absensi-cenderawasih-3",storageBucket:"absensi-cenderawasih-3.firebasestorage.app",messagingSenderId:"857719343353",appId:"1:857719343353:web:09ec127ec608f97f023a28"});
+var db=firebase.firestore(),$=function(s){return document.querySelector(s)},plan=[];
+function log(t,c){$('#log').innerHTML='<p class="'+(c||'')+'">'+t+'</p>'}
+function mins(s){var p=s.split(':');return +p[0]*60+ +p[1]}
+function t24(t){var d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+async function sha(s){var b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('att:'+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')}
+$('#go').onclick=async function(){
+  try{
+    log('Memuat…');
+    var c=await db.doc('config/main').get();if(!c.exists)return log('Data aplikasi tidak ditemukan.','bad');
+    var cfg=c.data();
+    if(cfg.pin&&(await sha($('#pin').value))!==cfg.pin)return log('PIN salah.','bad');
+    var snap=await db.collection('attendance').get(),recs={};
+    snap.forEach(function(d){var o=d.data();recs[o.wid+'_'+o.date]=o});
+    var ow=$('#ow').checked,miss=[];plan=[];
+    DATA.forEach(function(x){
+      var w=(cfg.workers||[]).filter(function(w){return w.name.trim().toUpperCase()===x.n})[0];
+      if(!w){if(miss.indexOf(x.n)<0)miss.push(x.n);return}
+      var old=recs[w.id+'_'+x.d]||{},tin=old.in?t24(old.in):x.i,oldOut=old.out?t24(old.out):x.o;
+      var res={n:x.n,d:x.d,i:tin,was:oldOut,wid:w.id,hasIn:!!old.in};
+      if(mins(tin)>=mins(OUT)){res.skip='masuk setelah 16:25';}
+      else if(oldOut&&!ow&&mins(oldOut)>mins(tin)){res.skip='sudah ada jam pulang';}
+      else if(oldOut===OUT){res.skip='sudah 16:25';}
+      plan.push(res)});
+    var todo=plan.filter(function(p){return!p.skip});
+    var h='<table><tr><th>Tanggal</th><th>Nama</th><th>Masuk</th><th>Pulang lama</th><th>Hasil</th></tr>';
+    plan.forEach(function(p){h+='<tr><td>'+p.d+'</td><td>'+p.n+'</td><td>'+p.i+'</td><td>'+(p.was||'-')+'</td><td>'+(p.skip?'<span class="mu">lewati ('+p.skip+')</span>':'<b class="ok">→ '+OUT+'</b>')+'</td></tr>'});
+    $('#tb').innerHTML=h+'</table>';
+    log(todo.length+' catatan akan diisi 16:25.'+(miss.length?' Nama tidak ditemukan di aplikasi: '+miss.join(', ')+'.':''),miss.length?'bad':'ok');
+    $('#apply').hidden=!todo.length;
+  }catch(e){log('Gagal: '+(e.message||e),'bad')}};
+$('#apply').onclick=async function(){
+  var b=this;b.disabled=true;var todo=plan.filter(function(p){return!p.skip}),n=0;
+  try{
+    for(var i=0;i<todo.length;i++){var p=todo[i],o={wid:p.wid,date:p.d,leave:'',out:new Date(p.d+'T'+OUT+':00').getTime(),manual:true};
+      if(!p.hasIn)o.in=new Date(p.d+'T'+p.i+':00').getTime();
+      await db.doc('attendance/'+p.wid+'_'+p.d).set(o,{merge:true});n++;log('Menyimpan '+n+' / '+todo.length+'…')}
+    log('Selesai: '+n+' catatan tersimpan. Buka aplikasi dan cek tab absensi.','ok');
+  }catch(e){log('Berhenti di '+n+' catatan. Gagal: '+(e.message||e),'bad');b.disabled=false}};
+</script></body></html>
