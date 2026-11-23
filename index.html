@@ -79,6 +79,11 @@ input:focus,select:focus{outline:2px solid var(--ac);border-color:var(--ac)}
 .chips{display:block}.grp{border:1px solid var(--bd);border-radius:10px;margin:10px 0;overflow:hidden}.gh{text-align:center;text-transform:uppercase;font-weight:700;font-size:12px;letter-spacing:.05em;padding:8px;background:var(--bg)}.gs{display:flex;border-top:1px solid var(--bd)}.gs .chip{border:0;border-left:1px solid var(--bd);border-radius:0;padding:10px 4px}.gs .chip:first-child{border-left:0}
 .tt td{font-weight:700;border-top:2px solid var(--tx)}.gt{text-align:center;text-transform:uppercase;font-size:12px;letter-spacing:.05em;padding:8px;border-top:1px solid var(--bd)}.gt b{font-size:16px;margin-left:6px}
 .mt th{border:2px solid var(--tx)}.mt td{border-bottom:2px solid var(--tx)}.mt .gl{border-left:3px solid var(--tx)}.mt .gr{border-right:3px solid var(--tx)}.mt .tt td{border-top:3px solid var(--tx)}
+.gtt{text-align:center;font-weight:700;font-size:18px;margin:4px 0 8px;letter-spacing:.05em}.gtt small{display:block;font-size:13px;font-weight:600;letter-spacing:0}
+.gt{font-size:12px;width:auto;min-width:100%}.gt th,.gt td{border:1px solid var(--tx);padding:4px 2px;min-width:24px;text-align:center}
+.gt th{background:rgba(204,0,0,.15);text-transform:uppercase;font-size:11px}.gt .nm{text-align:left;min-width:140px;padding:4px 8px}.gt .off{background:rgba(128,128,128,.2)}
+.gsg{text-align:right;margin:14px 24px 14px 0;font-size:14px;line-height:1.3}
+@media print{@page{size:landscape;margin:8mm}.gt th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 </head>
 <body>
@@ -126,8 +131,9 @@ input:focus,select:focus{outline:2px solid var(--ac);border-color:var(--ac)}
   <div class="row" style="margin-top:12px"><button id="add">Tambah lokasi</button><button class="s" id="cx" hidden>Batal</button></div><div class="st" id="sst"></div></div>
 
 <div class="card" id="rep" data-t="rep"><div class="po">Absensi Pekerja Cenderawasih Motor 3</div><h2>Kehadiran bulanan</h2>
-  <div class="row noprint"><input id="mo" type="month"><select id="wwk"><option value="5">Hari kerja: Sen–Jum</option><option value="6">Hari kerja: Sen–Sab</option><option value="7">Hari kerja: setiap hari</option></select><button class="s" id="prt">🖨️ Cetak / PDF</button></div>
+  <div class="row noprint"><input id="mo" type="month"><select id="wwk"><option value="5">Hari kerja: Sen–Jum</option><option value="6">Hari kerja: Sen–Sab</option><option value="7">Hari kerja: setiap hari</option></select><button class="s" id="prt">🖨️ Cetak / PDF</button><button class="s" id="gcsv">📊 Unduh lembar absensi (CSV)</button></div>
   <div class="mu" id="mmeta" style="margin-top:8px"></div>
+  <div class="sc" id="gtbl" style="margin-top:10px"></div>
   <div class="sc" id="mtbl" style="margin-top:10px"></div>
   <div id="mwrap" hidden><h2 style="margin:18px 0 8px">Absensi per pekerja</h2>
     <div class="row noprint"><select id="mf"><option value="all">Tampilkan: semua hari</option><option value="prob">Tampilkan: hanya terlambat, alpa &amp; izin</option></select><button class="s" id="mcl">▸ Minimize semua</button><button class="s" id="mop">▾ Buka semua</button></div>
@@ -283,11 +289,14 @@ function dayRow(id,k,r,s,td){var dt='',open=ed&&ed.id===id&&ed.k===k,b='<span cl
   else if(r.leave)dt=(r.note?esc(r.note):'Tidak ada alasan')+(r.proof?' <button class="s sm noprint" data-pf="'+esc(id+'|'+k)+'">📎 Bukti</button>':'');
   return'<div class="dy s-'+s+'"><div class="dh"><span><b>'+k.slice(8)+' '+DW[new Date(k+'T00:00:00').getDay()]+'</b> · '+b+(dt?'<small>'+dt+'</small>':'')+'</span>'
     +(open?'<button class="s sm noprint" data-cn="1">Tutup</button>':'<button class="s sm noprint" data-ed="'+esc(id+'|'+k)+'">Ubah</button>')+'</div>'+(open?editor():'')+'</div>'}
+var GR=[],MN=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 function drawMonth(force){
   var mo=$('#mo').value||ds(new Date()).slice(0,7),y=+mo.slice(0,4),mm=+mo.slice(5,7)-1,td=ds(new Date()),wd=[],days=[],flt=$('#mf').value;
   for(var dd=new Date(y,mm,1);dd.getMonth()===mm;dd.setDate(dd.getDate()+1)){var k0=ds(dd);if(k0>td)break;days.push(k0);if(isWork(k0))wd.push(k0)}
   $('#mmeta').textContent='Hari kerja yang dihitung sejauh ini: '+wd.length+'. Terlambat = check-in setelah '+cfg.lateAfter+'. Alpa = hari kerja tanpa check-in dan tanpa catatan izin (hari ini belum dihitung alpa). Pulang cepat = check-out sebelum '+(cfg.outAfter||'17:00')+'.';
   var ids=cfg.workers.map(function(w){return w.id});Object.keys(recs).forEach(function(k){if(ids.indexOf(k)<0&&(cfg.hid||[]).indexOf(k)<0)ids.push(k)});ids.sort(byName);
+  var dim=new Date(y,mm+1,0).getDate(),gh='<table class="gt"><tr><th rowspan="2">No</th><th rowspan="2" class="nm">Nama</th><th colspan="'+dim+'">Tanggal</th><th rowspan="2">Jumlah kehadiran</th></tr><tr>',gb='',gn=0,gh2=['NO','NAMA'];
+  for(var gd=1;gd<=dim;gd++){gh+='<th>'+gd+'</th>';gh2.push(gd)}gh+='</tr>';gh2.push('JUMLAH KEHADIRAN');GR=[gh2];
   var m='<table class="mt"><tr><th class="gl" rowspan="2">Pekerja</th><th class="gl" colspan="3">Hadir</th><th class="gl" colspan="4">Alpa</th><th class="gl" rowspan="2">Pulang cepat</th><th class="gl gr" rowspan="2">Jam</th></tr><tr><th class="gl">Tepat waktu</th><th>Terlambat</th><th>Total</th><th class="gl">No info</th><th>Sakit</th><th>Izin</th><th>Total</th></tr>',body='',rows=0,T={p:0,l:0,ab:0,sk:0,ot:0,pc:0,ms:0};
   ids.forEach(function(id){
     var R=recs[id]||{},p=0,l=0,ab=0,sk=0,ot=0,ms=0,pc=0,rh='',cur=cfg.workers.some(function(w){return w.id===id}),
@@ -300,11 +309,18 @@ function drawMonth(force){
       if(!cur&&!(r.in||r.leave))return;
       if(flt==='prob'&&s!=='telat'&&s!=='alpa'&&s!=='sakit'&&s!=='izin'&&!(r.out&&isEarly(r.out)))return;
       rh+=dayRow(id,k,r,s,td)});
-    rows++;T.p+=p;T.l+=l;T.ab+=ab;T.sk+=sk;T.ot+=ot;T.pc+=pc;T.ms+=ms;m+='<tr><td class="gl">'+esc(nameOf(id))+'</td><td class="gl">'+(p-l)+'</td><td class="'+(l?'wn':'')+'">'+l+'</td><td><b>'+p+'</b></td><td class="gl'+(ab?' late':'')+'">'+ab+'</td><td class="'+(sk?'bl':'')+'">'+sk+'</td><td class="'+(ot?'bl':'')+'">'+ot+'</td><td><b>'+(ab+sk+ot)+'</b></td><td class="gl'+(pc?' late':'')+'">'+pc+'</td><td class="gl gr">'+(ms/3600000).toFixed(1)+'</td></tr>';
+    rows++;gn++;var gr='<tr><td>'+gn+'</td><td class="nm">'+esc(nameOf(id))+'</td>',gc=[gn,nameOf(id)];
+    for(var g=1;g<=dim;g++){var gk=mo+'-'+String(g).padStart(2,'0'),gs=gk>td?'':stOf(R[gk],gk,td),gv='',gcl='';
+      if(gs==='alpa'&&!cur)gs='';
+      if(gs==='hadir')gv='✓';else if(gs==='telat'){gv='✓';gcl='wn'}else if(gs==='sakit'){gv='S';gcl='bl'}else if(gs==='izin'){gv='I';gcl='bl'}else if(gs==='alpa'){gv='A';gcl='late'}
+      if(!isWork(gk))gcl+=' off';gr+='<td class="'+gcl+'">'+gv+'</td>';gc.push(gv)}
+    gb+=gr+'<td><b>'+p+'</b></td></tr>';gc.push(p);GR.push(gc);
+    T.p+=p;T.l+=l;T.ab+=ab;T.sk+=sk;T.ot+=ot;T.pc+=pc;T.ms+=ms;m+='<tr><td class="gl">'+esc(nameOf(id))+'</td><td class="gl">'+(p-l)+'</td><td class="'+(l?'wn':'')+'">'+l+'</td><td><b>'+p+'</b></td><td class="gl'+(ab?' late':'')+'">'+ab+'</td><td class="'+(sk?'bl':'')+'">'+sk+'</td><td class="'+(ot?'bl':'')+'">'+ot+'</td><td><b>'+(ab+sk+ot)+'</b></td><td class="gl'+(pc?' late':'')+'">'+pc+'</td><td class="gl gr">'+(ms/3600000).toFixed(1)+'</td></tr>';
     body+='<div class="wb'+(col[id]?' col':'')+'" data-id="'+esc(id)+'"><div class="wt" role="button" tabindex="0" data-tg="1" title="Minimize / buka" aria-expanded="'+(!col[id])+'"><span class="cv">▾</span>'
       +'<span style="flex:1;min-width:0"><b>'+esc(nameOf(id))+(cur?'':' <span class="mu">(dihapus)</span>')+'</b><small>Hadir '+p+' · Terlambat '+l+' · Alpa '+ab+' · Pulang cepat '+pc+' · Izin '+(sk+ot)+'</small></span><span class="mu">'+(ms/3600000).toFixed(1)+' jam</span></div>'
       +'<div class="wbody">'+(rh||'<div class="dy mu">'+(flt==='prob'?'Tidak ada data terlambat, alpa, atau izin.':'Belum ada hari yang dihitung.')+'</div>')+'</div></div>'});
   $('#mtbl').innerHTML=rows?m+'<tr class="tt"><td class="gl">Total</td><td class="gl">'+(T.p-T.l)+'</td><td>'+T.l+'</td><td>'+T.p+'</td><td class="gl">'+T.ab+'</td><td>'+T.sk+'</td><td>'+T.ot+'</td><td>'+(T.ab+T.sk+T.ot)+'</td><td class="gl">'+T.pc+'</td><td class="gl gr">'+(T.ms/3600000).toFixed(1)+'</td></tr></table>':'<span class="mu">Belum ada pekerja.</span>';
+  $('#gtbl').innerHTML=rows?'<div class="gtt">LAPORAN KEHADIRAN<small>'+MN[mm]+' '+y+'</small></div>'+gh+gb+'</table><div class="gsg">DIBUAT<br><br><br>( ............................ )</div><div class="mu noprint">✓ hadir (kuning = terlambat) · S sakit · I izin · A alpa · kolom abu-abu = bukan hari kerja.</div>':'';
   $('#mwrap').hidden=!rows;
   var ae=document.activeElement,nb=$('#mnotes');
   if(force||!(ae&&(ae.tagName==='INPUT'||ae.tagName==='SELECT')&&nb.contains(ae)))nb.innerHTML=body;
@@ -429,6 +445,7 @@ function csv(v){v=String(v);return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':
 function allRecs(){var list=[];Object.keys(recs).forEach(function(w){Object.keys(recs[w]).forEach(function(k){list.push(recs[w][k])})});
   list.sort(function(x,y){return x.date<y.date?-1:x.date>y.date?1:nameOf(x.wid)<nameOf(y.wid)?-1:1});return list}
 function dl(name,text,type){var u=URL.createObjectURL(new Blob([text],{type:type})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},1000)}
+$('#gcsv').onclick=function(){if(GR.length<2)return;dl('laporan-kehadiran-'+($('#mo').value||ds(new Date()).slice(0,7))+'.csv','\ufeff'+GR.map(function(r){return r.map(csv).join(',')}).join('\r\n'),'text/csv;charset=utf-8')};
 $('#exc').onclick=function(){
   var rows=['tanggal,pekerja,lokasi,jam masuk,jam pulang,terlambat,pulang cepat,jam kerja,izin,catatan,alasan terlambat,alasan pulang cepat'],list=allRecs();
   list.forEach(function(r){if(!(r.in||r.leave||r.lnote||r.onote))return;
